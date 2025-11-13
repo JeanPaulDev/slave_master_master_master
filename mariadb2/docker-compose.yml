@@ -1,0 +1,27 @@
+# Use root/example as user/password credentials
+
+services:
+
+  db:
+    image: mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: 123
+
+  db2:
+    image: mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: 456
+    
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080 # Accesible en http://localhost:8080
+
+  adminer2:
+    image: adminer # Usamos la misma imagen
+    restart: always
+    ports:
+      - 8082:8080 # El puerto interno de Adminer sigue siendo 8080, pero el externo es 8081

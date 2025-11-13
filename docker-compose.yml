@@ -1,0 +1,42 @@
+# Use root/example as user/password credentials
+services:
+
+  db:
+    image: mariadb
+    restart: always
+    environment:
+      # Contraseña para el usuario 'root' de MariaDB
+      MARIADB_ROOT_PASSWORD: 123
+      # IMPORTANTE: El host de las bases de datos para phpMyAdmin es el nombre del servicio.
+      # En este caso, el host es 'db' para el primer phpMyAdmin.
+
+  db2:
+    image: mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: 456
+      # El host de esta base de datos es 'db2' para el segundo phpMyAdmin.
+    
+  phpmyadmin:
+    image: phpmyadmin # Imagen oficial de phpMyAdmin
+    restart: always
+    ports:
+      - 8080:80 # phpMyAdmin usa el puerto 80 internamente
+    environment:
+      # Especifica el host de la base de datos a la que debe conectarse
+      # 'db' es el nombre del servicio de la primera base de datos.
+      PMA_HOST: db 
+      # Permite iniciar sesión como 'root' con la contraseña establecida en el servicio 'db' (123).
+      # No se recomienda dejar esta variable, pero te permite usar las credenciales de root por defecto.
+      PMA_ARBITRARY: 1 
+
+  phpmyadmin2:
+    image: phpmyadmin
+    restart: always
+    ports:
+      - 8082:80 # Mantenemos el puerto externo 8082
+    environment:
+      # Especifica el host de la segunda base de datos
+      # 'db2' es el nombre del servicio de la segunda base de datos.
+      PMA_HOST: db2
+      PMA_ARBITRARY: 1
