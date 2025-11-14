@@ -1,0 +1,84 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependency directories
+node_modules
+pnpm-lock.yaml
+yarn.lock
+
+# Optional build artifacts
+dist
+build
+coverage
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Various editor backups and temporary files
+.vscode/
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.~
+swo
+.DS_Store
+
+# Transpiled JavaScript if you're using TypeScript or similar
+lib
+out
+
+# Parcel v1 output directory
+.cache
+
+# Serverless framework files
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# Next.js build output
+.next/
+
+# Nuxt.js build output
+.nuxt/
+
+# Gatsby build output
+.cache-dir/
+public
+
+# Docusaurus build output
+build
+
+# IntelliJ
+.iml
+
+# macOS files
+.AppleDouble
+.com.apple.timemachine.donotpresent
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.localized
+
+# Windows files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+System Volume Information/
+
+# Personal/Project specific ignores
+# Add your own custom ignores here if needed

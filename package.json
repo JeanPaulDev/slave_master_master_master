@@ -1,0 +1,14 @@
+{
+  "name": "slave_master_master_master",
+  "version": "1.0.0",
+  "main": "concurrentInsert.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "mariadb": "^3.4.5"
+  }
+}

@@ -1,0 +1,7 @@
+[mysqld]
+server-id=1 
+log_bin=mysql-bin 
+log-slave-updates=1
+auto-increment-increment=2
+auto-increment-offset=1
+binlog_do_db=TEST

@@ -1,42 +1,59 @@
-# Use root/example as user/password credentials
+version: '3.8'
+
 services:
 
+  # 1. Base de Datos Maestra 1 (db)
   db:
-    image: mariadb
+    image: mariadb:latest
+    container_name: mariadb_master1
     restart: always
     environment:
-      # Contraseña para el usuario 'root' de MariaDB
       MARIADB_ROOT_PASSWORD: 123
-      # IMPORTANTE: El host de las bases de datos para phpMyAdmin es el nombre del servicio.
-      # En este caso, el host es 'db' para el primer phpMyAdmin.
-
+    ports:
+      # Acceso externo para Node.js
+      - "3306:3306" 
+    volumes:
+      # Configuración de replicación (server-id=1, log_bin, auto-increment-offset=1)
+      - ./custom_master.cnf:/etc/mysql/conf.d/custom.cnf
+      # Carga la BD 'test' automáticamente al iniciar
+      - ./init_db:/docker-entrypoint-initdb.d
+    
+  # 2. Base de Datos Maestra 2 (db2)
   db2:
-    image: mariadb
+    image: mariadb:latest
+    container_name: mariadb_master2
     restart: always
     environment:
       MARIADB_ROOT_PASSWORD: 456
-      # El host de esta base de datos es 'db2' para el segundo phpMyAdmin.
+    ports:
+      # Acceso externo para Node.js (Puerto diferente)
+      - "3307:3306" 
+    volumes:
+      # Configuración de replicación (server-id=2, log-slave-updates, auto-increment-offset=2)
+      - ./custom_slave.cnf:/etc/mysql/conf.d/custom.cnf
+      # Carga la BD 'test' automáticamente al iniciar
+      - ./init_db:/docker-entrypoint-initdb.d
     
+  # 3. phpMyAdmin para el Maestro 1 (db)
   phpmyadmin:
-    image: phpmyadmin # Imagen oficial de phpMyAdmin
+    image: phpmyadmin
     restart: always
     ports:
-      - 8080:80 # phpMyAdmin usa el puerto 80 internamente
+      - 8080:80
     environment:
-      # Especifica el host de la base de datos a la que debe conectarse
-      # 'db' es el nombre del servicio de la primera base de datos.
-      PMA_HOST: db 
-      # Permite iniciar sesión como 'root' con la contraseña establecida en el servicio 'db' (123).
-      # No se recomienda dejar esta variable, pero te permite usar las credenciales de root por defecto.
+      PMA_HOST: db # Conexión a la base de datos interna 'db'
       PMA_ARBITRARY: 1 
+    depends_on:
+      - db
 
+  # 4. phpMyAdmin para el Maestro 2 (db2)
   phpmyadmin2:
     image: phpmyadmin
     restart: always
     ports:
-      - 8082:80 # Mantenemos el puerto externo 8082
+      - 8082:80
     environment:
-      # Especifica el host de la segunda base de datos
-      # 'db2' es el nombre del servicio de la segunda base de datos.
-      PMA_HOST: db2
-      PMA_ARBITRARY: 1
+      PMA_HOST: db2 # Conexión a la base de datos interna 'db2'
+      PMA_ARBITRARY: 1   
+    depends_on:
+      - db2
