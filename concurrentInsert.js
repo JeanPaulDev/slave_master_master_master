@@ -1,28 +1,26 @@
-// concurrentInsert.js
-
 const mariadb = require('mariadb');
 
 // --- Configuración de las dos Bases de Datos ---
 
-// db: Acceso por el puerto 3306
+// db1: Acceso por el puerto 3306 (Maestro 1)
 const dbConfig1 = {
     host: 'localhost', 
     port: 3306,        
     user: 'root',
     password: '123',   
-    database: 'test',  // Asegúrate que esta BD y la tabla 'test' existan
+    database: 'TEST',  
 };
 
-// db2: Acceso por el puerto 3307
+// db2: Acceso por el puerto 3307 (Maestro 2)
 const dbConfig2 = {
     host: 'localhost', 
     port: 3307,        
     user: 'root',
     password: '456',   
-    database: 'test',  // Asegúrate que esta BD y la tabla 'test' existan
+    database: 'TEST',  
 };
 
-// --- Función de Inserción ---
+// --- Función de Inserción Concurrente ---
 async function concurrentInsert() {
     let conn1, conn2;
     try {
@@ -35,22 +33,30 @@ async function concurrentInsert() {
         ]);
         
         // 2. Definir los datos y la consulta SQL
-        const data1 = ['DB1-Maestra, Hora: '+ new Date().toISOString()];
-        const data2 = ['DB2-Esclava, Hora: '+ new Date().toISOString()];
         
-        // ASUMIMOS que la tabla 'test' tiene columnas: 'columna_texto' y 'columna_tiempo'
-        const sql = 'INSERT INTO test (text) VALUES (?)'; 
+        // Datos para el campo 'nombre'
+        const nombre1 = 'DB1-M1 Concurrente: x' + new Date().toISOString();
+        const nombre2 = 'DB2-M2 Concurrente: x' + new Date().toISOString();
+        
+        // CORRECCIÓN CLAVE: Usamos UNHEX(REPLACE(UUID(), '-', '')) para generar BINARY(16)
+        const sql = 'INSERT INTO usuarios (id, nombre) VALUES (UNHEX(REPLACE(UUID(), "-", "")), ?)'; 
 
-        console.log('--- Iniciando Inserciones Concurrentes ---');
+        console.log('--- Iniciando 2 Inserciones Simultáneas (Una en cada Maestro) ---');
         
         // 3. Ejecutar ambas consultas en paralelo
         const [result1, result2] = await Promise.all([
-            conn1.query(sql, data1),
-            conn2.query(sql, data2)
+            // Inserción en Maestro 1 (3306)
+            conn1.query(sql, [nombre1]), 
+            // Inserción en Maestro 2 (3307)
+            conn2.query(sql, [nombre2])
         ]);
         
-        console.log(`✅ Inserción en DB1 (3306) completada. ID: ${result1.insertId}`);
-        console.log(`✅ Inserción en DB2 (3307) completada. ID: ${result2.insertId}`);
+        // Confirmamos el éxito basado en las filas afectadas (affectedRows)
+        console.log(`✅ Inserción en DB1 (3306) completada. Filas afectadas: ${result1.affectedRows}. Nombre: "${nombre1}"`);
+        console.log(`✅ Inserción en DB2 (3307) completada. Filas afectadas: ${result2.affectedRows}. Nombre: "${nombre2}"`);
+
+        console.log('\n--- PRUEBA EXITOSA ---');
+        console.log('Ambas inserciones se realizaron simultáneamente. Si la réplica es exitosa, cada base de datos debería tener 2 nuevas filas.');
 
     } catch (err) {
         // Muestra el error de forma legible
