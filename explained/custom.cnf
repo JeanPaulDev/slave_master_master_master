@@ -1,0 +1,11 @@
+[mysqld]
+# Habilita el log binario (binlog), esencial para la réplica.
+log_bin
+# Formato de binlog basado en filas, requerido para réplica GTID y cambios DDL/DML seguros.
+binlog_format=ROW
+# CRÍTICO PARA MASTER-MASTER: Asegura que las transacciones recibidas por la réplica 
+# se escriban en el binlog local. Esto permite que el cambio se propague al otro maestro.
+log_slave_updates
+# CRÍTICO PARA GTID: Define un ID de clúster global (dominio). 
+# Este ID debe ser el mismo en todos los maestros/esclavos de este clúster.
+gtid_domain_id=1

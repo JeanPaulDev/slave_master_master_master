@@ -1,0 +1,91 @@
+version: '3.7'
+
+# Define la red interna que usarán los contenedores para comunicarse por nombre.
+networks:
+  replication_net:
+    driver: bridge
+
+services:
+  # --- MAESTRO 1 (mariadb_master1) ---
+  mariadb_master1:
+    container_name: mariadb_master1
+    image: mariadb:10.6 # Versión estable, importante para las compatibilidades de GTID.
+    networks:
+      - replication_net
+    environment:
+      MARIADB_ROOT_PASSWORD: 123
+      MARIADB_REPLICATION_USER: repl_user
+      MARIADB_REPLICATION_PASSWORD: replicontra123
+    volumes:
+      - db-data1:/var/lib/mysql # Persistencia de datos (binlogs, GTID).
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # <--- CRÍTICO: SOLO M1 ejecuta este script inicial.
+      - ./custom.cnf:/etc/mysql/conf.d/custom.cnf # Carga la configuración de GTID.
+    # CRÍTICO PARA GTID: Asigna un ID único a este servidor dentro del clúster.
+    command: --server-id=1
+    ports:
+      - "3306:3306" # Puerto estándar mapeado para Node.js y phpMyAdmin.
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-p123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  # --- MAESTRO 2 (mariadb_master2) ---
+  mariadb_master2:
+    container_name: mariadb_master2
+    image: mariadb:10.6
+    networks:
+      - replication_net
+    environment:
+      MARIADB_ROOT_PASSWORD: 456
+      MARIADB_REPLICATION_USER: repl_user
+      MARIADB_REPLICATION_PASSWORD: replicontra123
+    volumes:
+      - db-data2:/var/lib/mysql
+      # IMPORTANTE: No cargamos init.sql aquí para evitar que ambos servidores 
+      # generen la misma transacción inicial (CREATE USER) con GTID duplicado.
+      - ./custom.cnf:/etc/mysql/conf.d/custom.cnf
+    # CRÍTICO PARA GTID: Asigna un ID único y diferente.
+    command: --server-id=2
+    ports:
+      - "3307:3306" # Mapeado a un puerto diferente para evitar conflictos.
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-p456"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: always
+    
+  # --- PHP MY ADMIN (Monitoreo) ---
+  phpmyadmin_master1:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin_master1
+    networks:
+      - replication_net
+    environment:
+      PMA_HOST: mariadb_master1 # Apunta al Maestro 1
+      MYSQL_ROOT_PASSWORD: 123
+    ports:
+      - "8880:80"
+    depends_on:
+      - mariadb_master1 
+    restart: always
+
+  phpmyadmin_master2:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin_master2
+    networks:
+      - replication_net
+    environment:
+      PMA_HOST: mariadb_master2 # Apunta al Maestro 2
+      MYSQL_ROOT_PASSWORD: 456
+    ports:
+      - "8881:80"
+    depends_on:
+      - mariadb_master2
+    restart: always
+
+volumes:
+  db-data1: # Volúmenes para persistir datos y evitar la pérdida de GTID al reiniciar.
+  db-data2:
