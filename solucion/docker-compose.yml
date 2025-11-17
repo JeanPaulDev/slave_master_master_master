@@ -1,0 +1,84 @@
+version: '3.7'
+
+networks:
+  replication_net:
+    driver: bridge
+
+services:
+  mariadb_master1:
+    container_name: mariadb_master1
+    image: mariadb:10.6
+    networks:
+      - replication_net
+    environment:
+      MARIADB_ROOT_PASSWORD: 123
+      MARIADB_REPLICATION_USER: repl_user
+      MARIADB_REPLICATION_PASSWORD: replicontra123
+    volumes:
+      - db-data1:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # <--- SOLO M1 EJECUTA init.sql
+      - ./custom.cnf:/etc/mysql/conf.d/custom.cnf
+    command: --server-id=1
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-p123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  mariadb_master2:
+    container_name: mariadb_master2
+    image: mariadb:10.6
+    networks:
+      - replication_net
+    environment:
+      MARIADB_ROOT_PASSWORD: 456
+      MARIADB_REPLICATION_USER: repl_user
+      MARIADB_REPLICATION_PASSWORD: replicontra123
+    volumes:
+      - db-data2:/var/lib/mysql
+      # - ./init.sql:/docker-entrypoint-initdb-d/init.sql # <--- ¡ELIMINADO AQUÍ!
+      - ./custom.cnf:/etc/mysql/conf.d/custom.cnf
+    command: --server-id=2
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-p456"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: always
+    
+  phpmyadmin_master1:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin_master1
+    networks:
+      - replication_net
+    environment:
+      PMA_HOST: mariadb_master1
+      MYSQL_ROOT_PASSWORD: 123
+    ports:
+      - "8880:80"
+    depends_on:
+      - mariadb_master1 
+    restart: always
+
+  phpmyadmin_master2:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin_master2
+    networks:
+      - replication_net
+    environment:
+      PMA_HOST: mariadb_master2
+      MYSQL_ROOT_PASSWORD: 456
+    ports:
+      - "8881:80"
+    depends_on:
+      - mariadb_master2
+    restart: always
+
+volumes:
+  db-data1:
+  db-data2:

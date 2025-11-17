@@ -1,0 +1,10 @@
+[mysqld]
+# Habilita el log binario (necesario para ser maestro/esclavo)
+log_bin
+# Formato del binlog recomendado para réplica GTID
+binlog_format=ROW
+# Asegura que las actualizaciones recibidas por réplica se escriban en el binlog (CRÍTICO para Master-Master)
+log_slave_updates
+# Define el dominio GTID para este clúster (debe ser el mismo en ambos)
+gtid_domain_id=1
+# Server ID es manejado por el 'command' en docker-compose
