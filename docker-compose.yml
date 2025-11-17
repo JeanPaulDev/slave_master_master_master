@@ -1,59 +1,86 @@
-version: '3.8'
+version: '3.7'
+
+networks:
+  replication_net:
+    driver: bridge
 
 services:
-
-  # 1. Base de Datos Maestra 1 (db)
-  db:
-    image: mariadb:latest
+  mariadb_master1:
     container_name: mariadb_master1
-    restart: always
+    image: mariadb:10.6
+    networks:
+      - replication_net
     environment:
       MARIADB_ROOT_PASSWORD: 123
-    ports:
-      # Acceso externo para Node.js
-      - "3306:3306" 
+      MARIADB_REPLICATION_USER: repl_user
+      MARIADB_REPLICATION_PASSWORD: replicontra123
+      # Configuración de réplica GTID y ID único
+      MARIADB_EXTRA_FLAGS: --log-bin --binlog-format=ROW --server-id=1 --gtid-domain-id=1 --log-slave-updates
+      MARIADB_MASTER_HOST: mariadb_master2 # Master-Master
     volumes:
-      # Configuración de replicación (server-id=1, log_bin, auto-increment-offset=1)
-      - ./custom_master.cnf:/etc/mysql/conf.d/custom.cnf
-      # Carga la BD 'test' automáticamente al iniciar
-      - ./init_db:/docker-entrypoint-initdb.d
-    
-  # 2. Base de Datos Maestra 2 (db2)
-  db2:
-    image: mariadb:latest
-    container_name: mariadb_master2
+      - db-data1:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Script de inicialización
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-p123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     restart: always
+
+  mariadb_master2:
+    container_name: mariadb_master2
+    image: mariadb:10.6
+    networks:
+      - replication_net
     environment:
       MARIADB_ROOT_PASSWORD: 456
-    ports:
-      # Acceso externo para Node.js (Puerto diferente)
-      - "3307:3306" 
+      MARIADB_REPLICATION_USER: repl_user
+      MARIADB_REPLICATION_PASSWORD: replicontra123
+      # Configuración de réplica GTID y ID único
+      MARIADB_EXTRA_FLAGS: --log-bin --binlog-format=ROW --server-id=2 --gtid-domain-id=1 --log-slave-updates
+      MARIADB_MASTER_HOST: mariadb_master1 # Master-Master
     volumes:
-      # Configuración de replicación (server-id=2, log-slave-updates, auto-increment-offset=2)
-      - ./custom_slave.cnf:/etc/mysql/conf.d/custom.cnf
-      # Carga la BD 'test' automáticamente al iniciar
-      - ./init_db:/docker-entrypoint-initdb.d
+      - db-data2:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Script de inicialización
+    ports:
+      - "3307:3306" # Puerto externo 3307
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-p456"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: always
     
-  # 3. phpMyAdmin para el Maestro 1 (db)
-  phpmyadmin:
-    image: phpmyadmin
-    restart: always
-    ports:
-      - 8080:80
+  phpmyadmin_master1:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin_master1
+    networks:
+      - replication_net
     environment:
-      PMA_HOST: db # Conexión a la base de datos interna 'db'
-      PMA_ARBITRARY: 1 
+      PMA_HOST: mariadb_master1
+      MYSQL_ROOT_PASSWORD: 123
+    ports:
+      - "8880:80" # PUERTO CORREGIDO
     depends_on:
-      - db
+      - mariadb_master1 
+    restart: always
 
-  # 4. phpMyAdmin para el Maestro 2 (db2)
-  phpmyadmin2:
-    image: phpmyadmin
-    restart: always
-    ports:
-      - 8082:80
+  phpmyadmin_master2:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin_master2
+    networks:
+      - replication_net
     environment:
-      PMA_HOST: db2 # Conexión a la base de datos interna 'db2'
-      PMA_ARBITRARY: 1   
+      PMA_HOST: mariadb_master2
+      MYSQL_ROOT_PASSWORD: 456
+    ports:
+      - "8881:80" # PUERTO CORREGIDO
     depends_on:
-      - db2
+      - mariadb_master2
+    restart: always
+
+volumes:
+  db-data1:
+  db-data2:

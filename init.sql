@@ -1,14 +1,14 @@
-CREATE DATABASE IF NOT EXISTS test;
-USE test;
+-- init.sql
+-- Crea la base de datos de prueba y el usuario de réplica
+CREATE DATABASE IF NOT EXISTS TEST;
+CREATE USER IF NOT EXISTS 'repl_user'@'%' IDENTIFIED BY 'replicontra123';
+GRANT REPLICATION SLAVE ON *.* TO 'repl_user'@'%';
+FLUSH PRIVILEGES;
 
-CREATE TABLE `test` (
-  `id` int(255) NOT NULL,
-  `text` varchar(100) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
-
-INSERT INTO `test` (`id`, `text`) VALUES
-(1, 'hola'),
-(2, 'hello');
-
-ALTER TABLE `test` ADD PRIMARY KEY (`id`);
-ALTER TABLE `test` MODIFY `id` int(255) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+-- Crea la tabla inicial dentro de la DB TEST
+USE TEST;
+CREATE TABLE IF NOT EXISTS test_table ( 
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, 
+    origen VARCHAR(20) NOT NULL, 
+    mensaje VARCHAR(100) 
+);

@@ -1,5 +1,6 @@
-[mysqld]
+[mariadb]
+# Replicación
+log-bin=mysql-bin
 server-id=2
-log-slave-updates=1
-auto-increment-increment=2
-auto-increment-offset=2
+log-slave-updates=ON
+# Eliminada: gtid_mode=ON
