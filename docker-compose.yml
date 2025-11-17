@@ -14,12 +14,11 @@ services:
       MARIADB_ROOT_PASSWORD: 123
       MARIADB_REPLICATION_USER: repl_user
       MARIADB_REPLICATION_PASSWORD: replicontra123
-      # Configuración de réplica GTID y ID único
-      MARIADB_EXTRA_FLAGS: --log-bin --binlog-format=ROW --server-id=1 --gtid-domain-id=1 --log-slave-updates
-      MARIADB_MASTER_HOST: mariadb_master2 # Master-Master
     volumes:
       - db-data1:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Script de inicialización
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Mantiene la inicialización de usuario/privilegios
+      - ./custom.cnf:/etc/mysql/conf.d/custom.cnf
+    command: --server-id=1
     ports:
       - "3306:3306"
     healthcheck:
@@ -38,14 +37,13 @@ services:
       MARIADB_ROOT_PASSWORD: 456
       MARIADB_REPLICATION_USER: repl_user
       MARIADB_REPLICATION_PASSWORD: replicontra123
-      # Configuración de réplica GTID y ID único
-      MARIADB_EXTRA_FLAGS: --log-bin --binlog-format=ROW --server-id=2 --gtid-domain-id=1 --log-slave-updates
-      MARIADB_MASTER_HOST: mariadb_master1 # Master-Master
     volumes:
       - db-data2:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Script de inicialización
+      # LÍNEA ELIMINADA: Ya no carga init.sql para evitar el conflicto GTID.
+      - ./custom.cnf:/etc/mysql/conf.d/custom.cnf
+    command: --server-id=2
     ports:
-      - "3307:3306" # Puerto externo 3307
+      - "3307:3306"
     healthcheck:
       test: ["CMD", "mariadb-admin", "ping", "-p456"]
       interval: 10s
@@ -62,7 +60,7 @@ services:
       PMA_HOST: mariadb_master1
       MYSQL_ROOT_PASSWORD: 123
     ports:
-      - "8880:80" # PUERTO CORREGIDO
+      - "8880:80"
     depends_on:
       - mariadb_master1 
     restart: always
@@ -76,7 +74,7 @@ services:
       PMA_HOST: mariadb_master2
       MYSQL_ROOT_PASSWORD: 456
     ports:
-      - "8881:80" # PUERTO CORREGIDO
+      - "8881:80"
     depends_on:
       - mariadb_master2
     restart: always
