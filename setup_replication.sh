@@ -4,33 +4,63 @@
 echo "Iniciando script de configuración. Esperando 10 segundos..."
 sleep 10
 
-# --- FUNCIÓN PARA EJECUTAR SQL DE FORMA SEGURA ---
+# --- FUNCIÓN PARA EJECUTAR SQL DE FORMA SIMPLE ---
 run_sql() {
     local container=$1
     local password=$2
     local sql_command=$3
     
     echo "Ejecutando SQL en $container..."
-    # Ejecutamos con la opción -s (silent) para suprimir output innecesario y -e (execute)
+    # Usamos -e para ejecutar el comando directamente
     docker exec "$container" mysql -u root -p"$password" -e "$sql_command"
     
     if [ $? -ne 0 ]; then
         echo "🚨 ERROR CRÍTICO: Fallo al ejecutar SQL en $container."
         echo "Comando: $sql_command"
+        exit 1
     fi
 }
 
-# --- FUNCIÓN PARA GENERAR UUID EN FORMATO BINARY(16) COMPATIBLE CON MARIA DB 10.6 ---
-# La función UUID_TO_BIN no existe. Usamos UNHEX(REPLACE(UUID(), '-', ''))
+# --- FUNCIONES PARA UUID (Compatibles con MariaDB 10.6) ---
 generate_uuid_sql() {
-    # Comando SQL para generar un UUID y convertirlo a BINARY(16)
     echo "UNHEX(REPLACE(UUID(), '-', ''))"
 }
 
-# --- FUNCIÓN PARA LEER BINARY(16) COMO UUID EN FORMATO STRING ---
-# La función BIN_TO_UUID no existe. Usamos manipulación de strings.
 display_uuid_sql() {
     echo "INSERT(INSERT(INSERT(INSERT(HEX(id),9,0,'-'),13,0,'-'),17,0,'-'),21,0,'-') AS id_uuid"
+}
+
+# --- FUNCIÓN PARA ESPERAR A QUE EL ESCLAVO ESTÉ LISTO (PARSING MEJORADO) ---
+wait_for_slave() {
+    local container=$1
+    local password=$2
+    local timeout=30
+    local start_time=$(date +%s)
+
+    echo "Esperando que la réplica I/O y SQL esté 'Yes' en $container (Máx $timeout s)..."
+
+    while true; do
+        current_time=$(date +%s)
+        if [ $((current_time - start_time)) -gt $timeout ]; then
+            echo "🚨 ERROR: Tiempo de espera agotado para la réplica en $container."
+            docker exec "$container" mysql -u root -p"$password" -e "SHOW SLAVE STATUS\G"
+            exit 1
+        fi
+
+        status=$(docker exec "$container" mysql -u root -p"$password" -e "SHOW SLAVE STATUS\G" 2>/dev/null)
+        
+        # FIX: Contamos cuántas veces aparece "Yes" en los campos clave. Mucho más fiable.
+        io_running_count=$(echo "$status" | grep -c "Slave_IO_Running: Yes")
+        sql_running_count=$(echo "$status" | grep -c "Slave_SQL_Running: Yes")
+
+        if [ "$io_running_count" -eq 1 ] && [ "$sql_running_count" -eq 1 ]; then
+            echo "✅ Réplica en $container está saludable."
+            break
+        fi
+
+        echo "Status de réplica no listo. IO: $io_running_count (esperado 1), SQL: $sql_running_count (esperado 1). Reintentando en 3s..."
+        sleep 3
+    done
 }
 
 
@@ -39,11 +69,21 @@ echo "=========================================================="
 echo "--- 1. Configurando enlaces GTID (Master-Master) ---"
 echo "=========================================================="
 
-# Configuración M1 (Maestro 1)
-run_sql mariadb_master1 123 "STOP SLAVE; CHANGE MASTER TO MASTER_HOST='mariadb_master2', MASTER_USER='repl_user', MASTER_PASSWORD='replicontra123', MASTER_PORT=3306, MASTER_AUTO_POSITION=1; START SLAVE;"
+# 1.1. Resetear el estado de Master/GTID en ambos servidores (CRÍTICO)
+run_sql mariadb_master1 123 "RESET MASTER;"
+run_sql mariadb_master2 456 "RESET MASTER;"
 
-# Configuración M2 (Maestro 2)
-run_sql mariadb_master2 456 "STOP SLAVE; CHANGE MASTER TO MASTER_HOST='mariadb_master1', MASTER_USER='repl_user', MASTER_PASSWORD='replicontra123', MASTER_PORT=3306, MASTER_AUTO_POSITION=1; START SLAVE;"
+# 1.2. Configuración M1 (Maestro 1) con sintaxis compatible
+REPLICA_M1="STOP SLAVE; CHANGE MASTER TO MASTER_HOST='mariadb_master2', MASTER_USER='repl_user', MASTER_PASSWORD='replicontra123', MASTER_PORT=3306, MASTER_USE_GTID=current_pos; START SLAVE;"
+run_sql mariadb_master1 123 "${REPLICA_M1}"
+
+# 1.3. Configuración M2 (Maestro 2)
+REPLICA_M2="STOP SLAVE; CHANGE MASTER TO MASTER_HOST='mariadb_master1', MASTER_USER='repl_user', MASTER_PASSWORD='replicontra123', MASTER_PORT=3306, MASTER_USE_GTID=current_pos; START SLAVE;"
+run_sql mariadb_master2 456 "${REPLICA_M2}"
+
+# Esperar a que AMBOS enlaces estén activos
+wait_for_slave mariadb_master1 123
+wait_for_slave mariadb_master2 456
 
 
 # --- 2. CREACIÓN DE ESQUEMA (Solo en M1) ---
@@ -51,22 +91,13 @@ echo "=========================================================="
 echo "--- 2. CREACIÓN DE DB y TABLA 'usuarios' (Solo en M1) ---"
 echo "=========================================================="
 
-# 2.1. Creación de DB y Tabla 'usuarios' con UUID
-# Usamos el comando -e de Docker de forma más robusta, ejecutando todas las sentencias de esquema juntas.
-SCHEMA_SQL="
-CREATE DATABASE IF NOT EXISTS TEST;
-USE TEST; 
-CREATE TABLE IF NOT EXISTS usuarios (
-    id BINARY(16) PRIMARY KEY NOT NULL,
-    nombre VARCHAR(255) NOT NULL,
-    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-"
-# Ejecutamos todo el bloque de creación
-run_sql mariadb_master1 123 "${SCHEMA_SQL}"
+# 2.1. Creación de DB y Tabla 'usuarios' con comandos separados (SOLUCIÓN ROBUSTA)
+run_sql mariadb_master1 123 "CREATE DATABASE IF NOT EXISTS TEST;"
+run_sql mariadb_master1 123 "USE TEST; CREATE TABLE IF NOT EXISTS usuarios (id BINARY(16) PRIMARY KEY NOT NULL, nombre VARCHAR(255) NOT NULL, creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
 
-echo "Esperando 5 segundos para que M2 reciba la réplica del esquema..."
-sleep 5
+# Esperamos a que M2 reciba y aplique la transacción del esquema
+echo "Esperando que M2 reciba la réplica del esquema..."
+wait_for_slave mariadb_master2 456
 
 
 # --- 3. PRUEBA DE RÉPLICA M1 -> M2 (Inserción en M1) ---
@@ -74,12 +105,13 @@ echo "=========================================================="
 echo "--- 3. PRUEBA: Insertando Fila 1 en M1 (Debe replicar a M2) ---"
 echo "=========================================================="
 
-# Insertamos un registro en M1 usando el generador de UUID compatible.
 INSERT_SQL="USE TEST; INSERT INTO usuarios (id, nombre) VALUES ($(generate_uuid_sql), 'Usuario M1 Replicado');"
 run_sql mariadb_master1 123 "${INSERT_SQL}"
 
-echo "Esperando 5 segundos para la réplica..."
-sleep 5
+# Esperamos a que M2 reciba y aplique la inserción
+echo "Esperando que M2 reciba la réplica de la inserción..."
+wait_for_slave mariadb_master2 456
+
 
 # 3.1. Verificar el contenido en M2
 echo "✅ RESULTADO PARCIAL: Filas en Maestro 2 (Debe mostrar 1 fila):"
@@ -90,12 +122,14 @@ docker exec mariadb_master2 mysql -u root -p456 -e "SELECT $(display_uuid_sql), 
 echo "=========================================================="
 echo "--- 4. PRUEBA CRUZADA: Insertando Fila 2 en M2 (Debe replicar a M1) ---"
 echo "=========================================================="
-# Insertamos un segundo registro en M2.
+
 INSERT_SQL="USE TEST; INSERT INTO usuarios (id, nombre) VALUES ($(generate_uuid_sql), 'Usuario M2 Replicado');"
 run_sql mariadb_master2 456 "${INSERT_SQL}"
 
-echo "Esperando 3 segundos para la réplica..."
-sleep 3
+# Esperamos a que M1 reciba y aplique la inserción
+echo "Esperando que M1 reciba la réplica de la inserción..."
+wait_for_slave mariadb_master1 123
+
 
 # 4.1. Verificar el contenido en M1 (Debe mostrar 2 filas)
 echo "✅ RESULTADO FINAL: Filas en Maestro 1 (Debe mostrar 2 filas):"

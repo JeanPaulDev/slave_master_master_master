@@ -16,7 +16,7 @@ services:
       MARIADB_REPLICATION_PASSWORD: replicontra123
     volumes:
       - db-data1:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Mantiene la inicialización de usuario/privilegios
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # <--- SOLO M1 EJECUTA init.sql
       - ./custom.cnf:/etc/mysql/conf.d/custom.cnf
     command: --server-id=1
     ports:
@@ -39,7 +39,7 @@ services:
       MARIADB_REPLICATION_PASSWORD: replicontra123
     volumes:
       - db-data2:/var/lib/mysql
-      # LÍNEA ELIMINADA: Ya no carga init.sql para evitar el conflicto GTID.
+      # - ./init.sql:/docker-entrypoint-initdb-d/init.sql # <--- ¡ELIMINADO AQUÍ!
       - ./custom.cnf:/etc/mysql/conf.d/custom.cnf
     command: --server-id=2
     ports:
