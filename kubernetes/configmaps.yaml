@@ -1,0 +1,57 @@
+# === ConfigMap para custom.cnf ===
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mariadb-config
+data:
+  custom.cnf: |
+    [mysqld]
+    # Habilita el log binario (necesario para ser maestro/esclavo)
+    log_bin
+    # Formato del binlog recomendado para réplica GTID
+    binlog_format=ROW
+    # Asegura que las actualizaciones recibidas por réplica se escriban en el binlog (CRÍTICO para Master-Master)
+    log_slave_updates
+    # Define el dominio GTID para este clúster (debe ser el mismo en ambos)
+    gtid_domain_id=1
+    # Server ID es manejado por el 'command' en Deployment
+---
+# === ConfigMap para init.sql ===
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mariadb-init-script
+data:
+  init.sql: |
+    -- init.sql
+    -- Solo crea el usuario de réplica y sus privilegios.
+    CREATE USER IF NOT EXISTS 'repl_user'@'%' IDENTIFIED BY 'replicontra123';
+    GRANT REPLICATION SLAVE ON *.* TO 'repl_user'@'%';
+    FLUSH PRIVILEGES;
+---
+# === ConfigMap para setup_replication.sh ===
+# Nota: En Kubernetes, la configuración inicial de réplica es un desafío
+# debido a la naturaleza efímera. Este script se ejecutará manualmente o
+# como un 'Job' (Ver el siguiente paso). Por ahora, lo mapeamos para referencia.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: replication-setup-script
+data:
+  # Contenido del setup_replication.sh
+  setup_replication.sh: |
+    #!/bin/bash
+    # (El contenido completo de setup_replication.sh iría aquí)
+    # NOTA CRÍTICA: En Kubernetes no se puede usar 'docker exec'.
+    # Tendrás que adaptar este script para usar comandos 'mysql'
+    # *dentro* de los contenedores usando el Service/ClusterIP. 
+    # Lo más común es usar un 'kubectl exec' o un 'Job' que usa curl/mysql.
+    
+    # ... (Por simplicidad en este paso, solo se guarda el contenido para referencia,
+    # pero la ejecución real se hace con 'kubectl exec' en K8s).
+    
+    # Por ahora, solo se guarda para referencia. El contenido del archivo
+    # 'setup_replication.sh' es muy largo para incluirlo aquí.
+    # El archivo 'setup_replication.sh' se ejecutará con 'kubectl exec'
+    # O se crea un Job/Pod para ejecutarlo contra los servicios.
+    echo "Script de configuración adaptado para Kubernetes."

@@ -1,0 +1,60 @@
+---
+# === Persistent Volume (PV) - Maestro 1 ===
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mariadb-master1-pv
+spec:
+  capacity:
+    storage: 5Gi # Tamaño adecuado para datos de DB
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    # Ajusta esta ruta a un directorio persistente en tu nodo
+    path: "/mnt/data/mariadb-master1" 
+---
+# === Persistent Volume Claim (PVC) - Maestro 1 ===
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mariadb-master1-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# === Persistent Volume (PV) - Maestro 2 ===
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mariadb-master2-pv
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    # Ajusta esta ruta a un directorio persistente en tu nodo
+    path: "/mnt/data/mariadb-master2"
+---
+# === Persistent Volume Claim (PVC) - Maestro 2 ===
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mariadb-master2-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

@@ -1,0 +1,14 @@
+[mysqld]
+# --- Desactivación de SSL/TLS (SOLUCIÓN) ---
+ssl-ca=
+ssl-cert=
+ssl-key=
+
+# --- Configuración de Galera ---
+wsrep_provider_options="socket.ssl=no"
+wsrep_sst_method=xtrabackup-v2
+# ... (otras configuraciones en [mysqld])
+
+[sst]
+# Esta sección debe estar vacía o solo contener variables SST reconocidas,
+# pero *sin* wsrep_sst_auth.

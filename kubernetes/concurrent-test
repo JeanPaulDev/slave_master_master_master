@@ -1,0 +1,128 @@
+# 06-concurrent-test.yaml
+
+# =================================================================
+# 1. ConfigMap: Contiene el script de prueba Node.js
+# =================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: concurrent-test-script
+data:
+  concurrentInsert.js: |
+    const mariadb = require('mariadb');
+
+    // Configuración de las dos Bases de Datos
+    const dbConfig1 = {
+        host: 'mariadb-master1', // Nombre del Service de K8s para Maestro 1
+        port: 3306,        
+        user: 'root',
+        password: '123',   
+        database: 'TEST',  
+    };
+
+    const dbConfig2 = {
+        host: 'mariadb-master2', // Nombre del Service de K8s para Maestro 2
+        port: 3306,        
+        user: 'root',
+        password: '456',   
+        database: 'TEST',  
+    };
+
+    // Función de Inserción Concurrente
+    async function concurrentInsert() {
+        let conn1, conn2;
+        try {
+            console.log('Intentando conectar y ejecutar inserciones concurrentes...');
+            
+            // 1. Crear conexiones en paralelo
+            [conn1, conn2] = await Promise.all([
+                mariadb.createConnection(dbConfig1),
+                mariadb.createConnection(dbConfig2)
+            ]);
+            
+            // 2. Definir los datos y la consulta SQL
+            const nombre1 = 'DB1-M1 Concurrente: ' + new Date().toISOString();
+            const nombre2 = 'DB2-M2 Concurrente: ' + new Date().toISOString();
+            
+            // Query para insertar UUID
+            const sql = 'INSERT INTO usuarios (id, nombre) VALUES (UNHEX(REPLACE(UUID(), "-", "")), ?)'; 
+
+            console.log('--- Iniciando 2 Inserciones Simultáneas (Una en cada Maestro) ---');
+            
+            // 3. Ejecutar ambas consultas en paralelo
+            const [result1, result2] = await Promise.all([
+                conn1.query(sql, [nombre1]), 
+                conn2.query(sql, [nombre2])
+            ]);
+            
+            console.log(`✅ Inserción en M1 completada. Filas afectadas: ${result1.affectedRows}.`);
+            console.log(`✅ Inserción en M2 completada. Filas afectadas: ${result2.affectedRows}.`);
+
+            // 4. Esperar 5 segundos para la réplica GTID
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            console.log('Esperando 5s para la réplica...');
+
+
+            // 5. Verificar el total de filas en M1 (Debe tener 4: 2 iniciales + 2 de la prueba)
+            const totalRows = await conn1.query('SELECT COUNT(*) AS count FROM TEST.usuarios');
+            const total = totalRows[0].count;
+            console.log(`\n--- RESULTADO FINAL EN M1 ---`);
+            console.log(`Total de filas después de la prueba: ${total}`);
+
+            if (total >= 4) {
+                console.log('🎉 PRUEBA EXITOSA: La inserción concurrente se realizó y las filas fueron replicadas.');
+            } else {
+                console.error('❌ PRUEBA FALLIDA: Se esperaban 4 o más filas. Revisa el estado de la réplica GTID.');
+                process.exit(1);
+            }
+
+        } catch (err) {
+            console.error('❌ Ocurrió un error CRÍTICO durante la prueba:', err.message || err);
+            process.exit(1);
+        } finally {
+            if (conn1) conn1.end();
+            if (conn2) conn2.end();
+        }
+    }
+
+    concurrentInsert();
+---
+# =================================================================
+# 2. Job: Ejecuta el script Node.js (Corrección Final)
+# =================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: concurrent-insertion-test
+spec:
+  backoffLimit: 1
+  # Mantiene el Pod por 2 minutos para que podamos ver el log si falla
+  ttlSecondsAfterFinished: 120 
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: node-test-runner
+        image: node:18-alpine
+        workingDir: /app 
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            # 1. COPIA EL SCRIPT MONTADO AL DIRECTORIO DE TRABAJO para evitar errores de permisos/path
+            cp /mnt/script/concurrentInsert.js /app/concurrentInsert.js
+            
+            echo "Instalando módulo 'mariadb'..."
+            npm install mariadb
+            
+            echo "Iniciando prueba de inserción concurrente..."
+            # 2. Ejecuta el script desde el directorio de trabajo
+            node concurrentInsert.js 
+            
+        volumeMounts:
+          - name: test-script-volume
+            mountPath: /mnt/script # Carpeta temporal donde se monta el ConfigMap
+      volumes:
+        - name: test-script-volume
+          configMap:
+            name: concurrent-test-script
+            defaultMode: 0744 # Permisos de ejecución más amplios

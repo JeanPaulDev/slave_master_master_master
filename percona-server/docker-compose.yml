@@ -1,0 +1,114 @@
+services:
+  # 1. Nodo Inicial (Bootstrap) - Se usará para iniciar el clúster una sola vez.
+  pxc1:
+    image: percona/percona-xtradb-cluster:8.0
+    container_name: pxc1
+    restart: always
+    volumes:
+      - pxc1_data:/var/lib/mysql
+      # Monta la configuración local
+      - ./pxc.cnf:/etc/mysql/conf.d/pxc.cnf 
+    environment:
+      MYSQL_ROOT_PASSWORD: pxc_root_password
+      CLUSTER_NAME: my-pxc-cluster
+      # FIX: Define la lista completa de miembros (mejora la estabilidad) y deshabilita SSL en el socket.
+      XTRADB_CLUSTER_OPTIONS: "gcomm://pxc1,pxc2,pxc3; socket.ssl=no"
+    networks:
+      - pxc_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppxc_root_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Nodo Secundario
+  pxc2:
+    image: percona/percona-xtradb-cluster:8.0
+    container_name: pxc2
+    restart: always
+    volumes:
+      - pxc2_data:/var/lib/mysql
+      # Monta la configuración local
+      - ./pxc.cnf:/etc/mysql/conf.d/pxc.cnf 
+    environment:
+      MYSQL_ROOT_PASSWORD: pxc_root_password
+      CLUSTER_NAME: my-pxc-cluster
+      # FIX: Define la lista completa de miembros (se une a cualquiera de ellos) y deshabilita SSL.
+      XTRADB_CLUSTER_OPTIONS: "gcomm://pxc1,pxc2,pxc3; socket.ssl=no"
+    networks:
+      - pxc_network
+    depends_on:
+      pxc1: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppxc_root_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. Nodo de Cuórum
+  pxc3:
+    image: percona/percona-xtradb-cluster:8.0
+    container_name: pxc3
+    restart: always
+    volumes:
+      - pxc3_data:/var/lib/mysql
+      # Monta la configuración local
+      - ./pxc.cnf:/etc/mysql/conf.d/pxc.cnf 
+    environment:
+      MYSQL_ROOT_PASSWORD: pxc_root_password
+      CLUSTER_NAME: my-pxc-cluster
+      # FIX: Define la lista completa de miembros y deshabilita SSL.
+      XTRADB_CLUSTER_OPTIONS: "gcomm://pxc1,pxc2,pxc3; socket.ssl=no"
+    networks:
+      - pxc_network
+    depends_on:
+      pxc2: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppxc_root_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 4. Gestor Web 1 (phpMyAdmin para pxc1)
+  phpmyadmin1:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadmin_pxc1
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      # Este PMA apuntará al primer nodo del clúster
+      PMA_HOST: pxc1
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: pxc_root_password
+    networks:
+      - pxc_network
+    depends_on:
+      pxc1: { condition: service_healthy }
+
+  # 5. Gestor Web 2 (phpMyAdmin para pxc2)
+  phpmyadmin2:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadmin_pxc2
+    restart: always
+    ports:
+      # El segundo PMA estará en el puerto 8081
+      - "8081:80"
+    environment:
+      # Este PMA apuntará al segundo nodo del clúster
+      PMA_HOST: pxc2
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: pxc_root_password
+    networks:
+      - pxc_network
+    depends_on:
+      pxc2: { condition: service_healthy }
+    
+volumes:
+  pxc1_data:
+  pxc2_data:
+  pxc3_data:
+
+networks:
+  pxc_network:
+    driver: bridge

@@ -1,74 +1,42 @@
-version: '3.7'
-
-volumes:
-  pmm-data: 
-
-networks:
-  replication_net:
-    name: slave_master_master_master_replication_net
-    external: true
+version: '3.8'
 
 services:
-
-  # --- 1. PMM Server ---
-  pmm-server:
-    image: percona/pmm-server:3
-    container_name: pmm-server
+  # 1. Servicio de Base de Datos (Percona Server)
+  db:
+    image: percona/percona-server:8.0
+    container_name: percona_server_db
     restart: always
-    networks:
-      - replication_net
-    ports:
-      - "8443:8443"
+    environment:
+      # --- CORRECCIÓN DE SEGURIDAD Y CONSISTENCIA ---
+      # No crearemos un usuario 'root' adicional, solo usaremos el root del sistema 
+      # y un usuario de aplicación si es necesario.
+      # Usar variables distintas es MÁS SEGURO:
+      MYSQL_ROOT_PASSWORD: mi_password_root_secreta  # ¡DEBE CAMBIARSE!
+      MYSQL_DATABASE: mi_base_de_datos              
+      
+      # Si quieres un usuario de aplicación:
+      MYSQL_USER: root                     
+      MYSQL_PASSWORD: 123456        
+      # ---------------------------------------------
+
     volumes:
-      - pmm-data:/srv
+      # Esta sintaxis está bien para un volumen administrado por Docker
+      - ./percona-data:/var/lib/mysql 
 
-  # --- 2. PMM Client para mariadb_master1 (Contraseña: 123) ---
-  pmm-client-master1:
-    image: percona/pmm-client:3
-    container_name: pmm-client-master1
+  # 2. Servicio de Gestor Web (phpMyAdmin)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadmin_gestor
     restart: always
-    networks:
-      - replication_net
+    ports:
+      - "8080:80"
     environment:
-      PMM_AGENT_SERVER_ADDRESS: pmm-server
-      PMM_AGENT_SERVER_USERNAME: root
-      PMM_AGENT_SERVER_PASSWORD: example 
-    
-    # NUEVA ESTRUCTURA: Ejecuta pmm-admin después de 15 segundos y luego inicia el agente.
-    entrypoint: 
-      /bin/sh -c "sleep 15 && pmm-admin add mysql 
-      --host=mariadb_master1 
-      --port=3306 
-      --username=root 
-      --password=123 
-      --service-name=mariadb_master1_monit
-      --tls --skip-ssl-verify; 
-      /opt/percona/pmm-client/bin/pmm-agent"
+      PMA_HOST: db 
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: mi_password_root_secreta # DEBE coincidir con la de 'db'
     depends_on:
-      - pmm-server
-
-  # --- 3. PMM Client para mariadb_master2 (Contraseña: 456) ---
-  pmm-client-master2:
-    image: percona/pmm-client:3
-    container_name: pmm-client-master2
-    restart: always
-    networks:
-      - replication_net
-    environment:
-      PMM_AGENT_SERVER_ADDRESS: pmm-server
-      PMM_AGENT_SERVER_USERNAME: root
-      PMM_AGENT_SERVER_PASSWORD: example 
+      - db
     
-    # NUEVA ESTRUCTURA: Ejecuta pmm-admin después de 15 segundos y luego inicia el agente.
-    entrypoint: 
-      /bin/sh -c "sleep 15 && pmm-admin add mysql 
-      --host=mariadb_master2 
-      --port=3306 
-      --username=root 
-      --password=456 
-      --service-name=mariadb_master2_monit
-      --tls --skip-ssl-verify; 
-      /opt/percona/pmm-client/bin/pmm-agent"
-
-    depends_on:
-      - pmm-server
+# 3. Volúmenes para persistencia de datos
+volumes:
+  db_data:

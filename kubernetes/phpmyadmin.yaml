@@ -1,0 +1,79 @@
+# === Service para PhpMyAdmin Maestro 1 ===
+apiVersion: v1
+kind: Service
+metadata:
+  name: phpmyadmin-master1
+spec:
+  type: NodePort # Exponer fuera del clúster (Reemplaza el mapeo de puerto 8880:80)
+  selector:
+    app: phpmyadmin-master1
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30080 # Acceso en el puerto 30080 (entre 30000-32767)
+---
+# === Deployment para PhpMyAdmin Maestro 1 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phpmyadmin-master1
+spec:
+  selector:
+    matchLabels:
+      app: phpmyadmin-master1
+  template:
+    metadata:
+      labels:
+        app: phpmyadmin-master1
+    spec:
+      containers:
+      - name: phpmyadmin-master1
+        image: phpmyadmin/phpmyadmin
+        env:
+          - name: PMA_HOST
+            value: "mariadb-master1" # Usamos el nombre del Service de K8s
+          - name: MYSQL_ROOT_PASSWORD
+            value: "123"
+        ports:
+          - containerPort: 80
+---
+# === Service para PhpMyAdmin Maestro 2 ===
+apiVersion: v1
+kind: Service
+metadata:
+  name: phpmyadmin-master2
+spec:
+  type: NodePort # Exponer fuera del clúster (Reemplaza el mapeo de puerto 8881:80)
+  selector:
+    app: phpmyadmin-master2
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30081 # Acceso en el puerto 30081
+---
+# === Deployment para PhpMyAdmin Maestro 2 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phpmyadmin-master2
+spec:
+  selector:
+    matchLabels:
+      app: phpmyadmin-master2
+  template:
+    metadata:
+      labels:
+        app: phpmyadmin-master2
+    spec:
+      containers:
+      - name: phpmyadmin-master2
+        image: phpmyadmin/phpmyadmin
+        env:
+          - name: PMA_HOST
+            value: "mariadb-master2" # Usamos el nombre del Service de K8s
+          - name: MYSQL_ROOT_PASSWORD
+            value: "456"
+        ports:
+          - containerPort: 80

@@ -1,0 +1,124 @@
+# === Service para Maestro 1 (Nombre de red) ===
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-master1
+spec:
+  selector:
+    app: mariadb-master1
+  ports:
+    - protocol: TCP
+      port: 3306 # Puerto de servicio (ClusterIP)
+      targetPort: 3306
+---
+# === Deployment para Maestro 1 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mariadb-master1
+spec:
+  selector:
+    matchLabels:
+      app: mariadb-master1
+  template:
+    metadata:
+      labels:
+        app: mariadb-master1
+    spec:
+      containers:
+      - name: mariadb-master1
+        image: mariadb:10.6
+        ports:
+          - containerPort: 3306
+        env:
+          - name: MARIADB_ROOT_PASSWORD
+            value: "123"
+          - name: MARIADB_REPLICATION_USER
+            value: "repl_user"
+          - name: MARIADB_REPLICATION_PASSWORD
+            value: "replicontra123"
+        args: ["--server-id=1"] # Replicando el 'command'
+        volumeMounts:
+          - name: db-data
+            mountPath: /var/lib/mysql
+          - name: custom-config
+            mountPath: /etc/mysql/conf.d/custom.cnf
+            subPath: custom.cnf
+          - name: init-script
+            mountPath: /docker-entrypoint-initdb.d/init.sql # Solo M1
+            subPath: init.sql
+        readinessProbe: # Replicando el Healthcheck
+          exec:
+            command: ["mariadb-admin", "ping", "-p123"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: mariadb-master1-pvc
+        - name: custom-config
+          configMap:
+            name: mariadb-config
+        - name: init-script
+          configMap:
+            name: mariadb-init-script
+---
+# === Service para Maestro 2 (Nombre de red) ===
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-master2
+spec:
+  selector:
+    app: mariadb-master2
+  ports:
+    - protocol: TCP
+      port: 3306 # Puerto de servicio (ClusterIP)
+      targetPort: 3306
+---
+# === Deployment para Maestro 2 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mariadb-master2
+spec:
+  selector:
+    matchLabels:
+      app: mariadb-master2
+  template:
+    metadata:
+      labels:
+        app: mariadb-master2
+    spec:
+      containers:
+      - name: mariadb-master2
+        image: mariadb:10.6
+        ports:
+          - containerPort: 3306
+        env:
+          - name: MARIADB_ROOT_PASSWORD
+            value: "456"
+          - name: MARIADB_REPLICATION_USER
+            value: "repl_user"
+            # MARIADB_REPLICATION_PASSWORD no es necesario aquí si se usa env del Service.
+          - name: MARIADB_REPLICATION_PASSWORD
+            value: "replicontra123"
+        args: ["--server-id=2"]
+        volumeMounts:
+          - name: db-data
+            mountPath: /var/lib/mysql
+          - name: custom-config
+            mountPath: /etc/mysql/conf.d/custom.cnf
+            subPath: custom.cnf
+        readinessProbe:
+          exec:
+            command: ["mariadb-admin", "ping", "-p456"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: mariadb-master2-pvc
+        - name: custom-config
+          configMap:
+            name: mariadb-config
