@@ -92,7 +92,8 @@ echo "=========================================================="
 
 wait_for_cluster_size() {
     local expected_size=$1
-    local timeout=60
+    # Aumentamos timeout para permitir inicializaciones más lentas en contenedores
+    local timeout=180
     local start_time=$(date +%s)
     
     echo "Esperando que el tamaño del clúster sea $expected_size (Máx $timeout s)..."
@@ -104,9 +105,25 @@ wait_for_cluster_size() {
             exit 1
         fi
 
-        # Consulta el tamaño del clúster desde pxc1
-        CLUSTER_SIZE=$(docker exec "$PXC_NODE" mysql -u root -p"$ROOT_PASS" -e "SHOW STATUS LIKE 'wsrep_cluster_size';" | grep 'wsrep_cluster_size' | awk '{print $2}')
+        # Consulta el tamaño del clúster desde pxc1 usando TCP (evita depender del socket local)
+        # Obtener IP del contenedor (intentar hostname -I dentro del contenedor, fallback a docker inspect)
+        CONTAINER_IP=$(docker exec "$PXC_NODE" bash -c "hostname -I | awk '{print \$1}'" 2>/dev/null || true)
+        if [ -z "$CONTAINER_IP" ]; then
+            CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PXC_NODE" 2>/dev/null || true)
+        fi
+
+        if [ -n "$CONTAINER_IP" ]; then
+            CLUSTER_SIZE=$(docker exec "$PXC_NODE" mysql -h"$CONTAINER_IP" -P3306 -u root -p"$ROOT_PASS" -e "SHOW STATUS LIKE 'wsrep_cluster_size';" 2>/dev/null | grep 'wsrep_cluster_size' | awk '{print $2}' || true)
+        else
+            # Fallback: intentar conectar sin especificar host (socket) si no tenemos IP
+            CLUSTER_SIZE=$(docker exec "$PXC_NODE" mysql -u root -p"$ROOT_PASS" -e "SHOW STATUS LIKE 'wsrep_cluster_size';" 2>/dev/null | grep 'wsrep_cluster_size' | awk '{print $2}' || true)
+        fi
         
+        # Normalizar valor: si está vacío o no es numérico, tratar como 0
+        if ! [[ "$CLUSTER_SIZE" =~ ^[0-9]+$ ]]; then
+            CLUSTER_SIZE=0
+        fi
+
         if [ "$CLUSTER_SIZE" -eq "$expected_size" ]; then
             echo "✅ Tamaño del clúster OK: $CLUSTER_SIZE nodos activos."
             break
