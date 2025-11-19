@@ -1,14 +1,21 @@
 [mysqld]
-# --- Desactivación de SSL/TLS (SOLUCIÓN) ---
-ssl-ca=
-ssl-cert=
-ssl-key=
+# --- Desactivación de SSL/TLS (si no se usa) ---
+ssl=0
 
-# --- Configuración de Galera ---
+# --- Configuración de Galera / Percona XtraDB Cluster ---
+# Opciones del proveedor Galera (no ejecutar comandos shell en este archivo)
 wsrep_provider_options="socket.ssl=no"
 wsrep_sst_method=xtrabackup-v2
-# ... (otras configuraciones en [mysqld])
+
+# Dirección del clúster: usar nombres de servicio de docker-compose
+wsrep_cluster_address=gcomm://pxc1:4567,pxc2:4567,pxc3:4567
+wsrep_cluster_name="my-pxc-cluster"
+
+# Recomendaciones para PXC
+binlog_format=ROW
+default_storage_engine=InnoDB
+innodb_autoinc_lock_mode=2
 
 [sst]
-# Esta sección debe estar vacía o solo contener variables SST reconocidas,
-# pero *sin* wsrep_sst_auth.
+# Credenciales para SST (solo en sección [sst])
+wsrep_sst_auth=root:pxc_root_password

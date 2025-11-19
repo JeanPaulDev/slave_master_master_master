@@ -1,0 +1,34 @@
+[mysqld]
+# Minimal node.cnf for local lab PXC cluster (SSL disabled)
+
+# Basic server
+default_authentication_plugin=mysql_native_password
+datadir=/var/lib/mysql
+socket=/tmp/mysql.sock
+skip-host-cache
+
+# Galera / PXC settings
+wsrep_provider=/usr/lib64/galera4/libgalera_smm.so
+wsrep_provider_options="socket.ssl=0"
+wsrep_sst_method=xtrabackup-v2
+# Explicit cluster address using docker-compose service names
+wsrep_cluster_address=gcomm://pxc1:4567,pxc2:4567,pxc3:4567
+wsrep_cluster_name=my-pxc-cluster
+
+# Percona / MySQL recommended
+binlog_format=ROW
+default_storage_engine=InnoDB
+innodb_autoinc_lock_mode=2
+innodb_flush_log_at_trx_commit=2
+
+# Node addressing - will be overwritten by entrypoint, but keep defaults
+# wsrep_node_address=172.18.0.X
+# wsrep_node_incoming_address=NODE_HOST:3306
+
+[client]
+socket=/tmp/mysql.sock
+
+[sst]
+# SST credentials - must match container env MYSQL_ROOT_PASSWORD or XTRABACKUP_PASSWORD usage
+wsrep_sst_auth=root:pxc_root_password
+progress=/var/lib/mysql/sst_in_progress
